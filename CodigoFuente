@@ -1,0 +1,1053 @@
+/**
+  *@mainpage Proyecto Final NRS
+  *
+  *@author Naren Alejandro Imbachi Quinayas
+  *@author Ruben Santiago Cruz
+  *@author Santiago Nieto 
+  *
+  *@section descrpcion Descripcion 
+  *Este proyecto fue implementado con el fin de usar lecturas de sensores para realizar el monitoreo de la temperatura y la luz. Para esto se uso la creacion de maquinas de estados para entrar a cada proceso una vez se cumplan las condiciones requeridas 
+  
+*/
+
+
+
+#include <Keypad.h>
+#include <LiquidCrystal.h>
+#include <stdlib.h>
+#include <EEPROM.h>
+#include "StateMachine.h"
+
+/**
+  *@brief seccion de codigo encargada de asignar los pines donde va conectado el dispositivo RBG 
+*/
+#define LED_BLUE 4
+#define LED_RED 2
+#define LED_GREEN 3
+
+/**
+  *@brief seccion de codigo encargada de asignar los pines donde va conectado el buzzer
+*/
+#define BUZZER_PASIVO 6	
+
+/**
+  *@brief seccion de codigo encargada de asignar los pines para el sensor de temperatura y luz
+*/
+#define SENSOR_TEMP A0
+#define SENSOR_LUZ A1
+
+/**
+  *@brief seccion de codigo encargada de definir las notas musicales para el buzzer
+*/
+#define NOTE_B0  31	
+#define NOTE_C1  33
+#define NOTE_CS1 35
+#define NOTE_D1  37
+#define NOTE_DS1 39
+#define NOTE_E1  41
+#define NOTE_F1  44
+#define NOTE_FS1 46
+#define NOTE_G1  49
+#define NOTE_GS1 52
+#define NOTE_A1  55
+#define NOTE_AS1 58
+#define NOTE_B1  62
+#define NOTE_C2  65
+#define NOTE_CS2 69
+#define NOTE_D2  73
+#define NOTE_DS2 78
+#define NOTE_E2  82
+#define NOTE_F2  87
+#define NOTE_FS2 93
+#define NOTE_G2  98
+#define NOTE_GS2 104
+#define NOTE_A2  110
+#define NOTE_AS2 117
+#define NOTE_B2  123
+#define NOTE_C3  131
+#define NOTE_CS3 139
+#define NOTE_D3  147
+#define NOTE_DS3 156
+#define NOTE_E3  165
+#define NOTE_F3  175
+#define NOTE_FS3 185
+#define NOTE_G3  196
+#define NOTE_GS3 208
+#define NOTE_A3  220
+#define NOTE_AS3 233
+#define NOTE_B3  247
+#define NOTE_C4  262
+#define NOTE_CS4 277
+#define NOTE_D4  294
+#define NOTE_DS4 311
+#define NOTE_E4  330
+#define NOTE_F4  349
+#define NOTE_FS4 370
+#define NOTE_G4  392
+#define NOTE_GS4 415
+#define NOTE_A4  440
+#define NOTE_AS4 466
+#define NOTE_B4  494
+#define NOTE_C5  523
+#define NOTE_CS5 554
+#define NOTE_D5  587
+#define NOTE_DS5 622
+#define NOTE_E5  659
+#define NOTE_F5  698
+#define NOTE_FS5 740
+#define NOTE_G5  784
+#define NOTE_GS5 831
+#define NOTE_A5  880
+#define NOTE_AS5 932
+#define NOTE_B5  988
+#define NOTE_C6  1047
+#define NOTE_CS6 1109
+#define NOTE_D6  1175
+#define NOTE_DS6 1245
+#define NOTE_E6  1319
+#define NOTE_F6  1397
+#define NOTE_FS6 1480
+#define NOTE_G6  1568
+#define NOTE_GS6 1661
+#define NOTE_A6  1760
+#define NOTE_AS6 1865
+#define NOTE_B6  1976
+#define NOTE_C7  2093
+#define NOTE_CS7 2217
+#define NOTE_D7  2349
+#define NOTE_DS7 2489
+#define NOTE_E7  2637
+#define NOTE_F7  2794
+#define NOTE_FS7 2960
+#define NOTE_G7  3136
+#define NOTE_GS7 3322
+#define NOTE_A7  3520
+#define NOTE_AS7 3729
+#define NOTE_B7  3951
+#define NOTE_C8  4186
+#define NOTE_CS8 4435
+#define NOTE_D8  4699
+#define NOTE_DS8 4978
+
+
+/**
+ * @brief Seccion de codigo encargada de configurar un el keypad que trabaja con una matriz 4x4 y asignar pines a los que ira conectado
+ * 
+ * Se declara a las constantes ROWS y COLS que indican el tamaño que tiene el teclado
+ * Se declara la matriz keys que usa para su construccion los valores de ROWS y COLS y dentro tiene los caracteres asociados a cada una de las teclas del keypad
+ * Se declara los arreglos rowPins y colPins los cuales alamacenan los pines donde va conectado el keypad
+ * Se declara el objeto keypad que se encarga de capturar los componentes para el funcionamineto del teclado
+ */
+const byte ROWS = 4;  
+const byte COLS = 4;  
+char keys[ROWS][COLS] = {
+  { '1', '2', '3', 'A'},
+  { '4', '5', '6', 'B' },
+  { '7', '8', '9', 'C'},
+  { '*', '0', '#', 'D' }
+};
+byte rowPins[ROWS] = {52, 50, 48, 46}; 
+byte colPins[COLS] = {44, 42, 40, 38}; 
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+/**
+  *@brief seccion de codigo encargada de asignar los pines donde va conectado la pantalla lcd
+  *
+  *Se declara las constantes donde se almacena los pines a los cuales va conectada la partalla lcd
+  *Se un objeto lcd haciendo uso de la libreria LiquidCrystal y al que ira asociados los pines especificados
+*/
+const int rs = 12, en = 11, d4 = 10, d5 = 9, d6 = 8, d7 = 7;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+
+/**
+  *@brief seccion de codigo encargada de declarar la variable seleccion donde se almacena los valores ingresados por teclado 
+*/
+char seleccion;
+
+/**
+  *@brief seccion de codigo encargada de declarar la variable cont que permite el cambio de menu en el lcd 
+*/
+int cont = -1;
+
+/**
+  *@brief seccion de codigo encargada de declarar las constantes para la temperatura y luz
+  *
+  *Se declara la constante numerica resetUmbralTempHigh que almacena el valor por defecto para la temperatura alta
+  *Se declara la constante numerica resetUmbralTempLow que almacena el valor por defecto para la temperatura baja
+  *Se declran la constante numerica maxtemp y minluz que almacena el valor por defecto para la maxima y minima temperatura respectivamente
+*/
+const int resetUmbralTempHigh = 29;
+const int resetUmbralTempLow = 26;
+const int maxtemp = 125;
+const int minluz = 1023;
+
+
+/**
+  *@brief seccion de codigo encargada de declarar las variables para la temperatura y luz 
+  *
+  *Se declara umbralTempHigh y umbralTempLow que almacena el valor de la temperatura modificado por el usuario en las opciones del menu
+  *Se declara umbralLuzHigh y umbralLuzLow que almacena el valor de luz modificado  por el usuario en las opciones del menu
+*/
+int umbralTempHigh = 29;
+int umbralTempLow = 26;
+int umbralLuzHigh = 1024;
+int umbralLuzLow = 1023;
+
+/**
+  *@brief seccion de codigo encargada de declarar el arreglo que almacena los datos ingresados por teclado
+*/
+char valor[4];
+int band = 0;
+/**
+  *@brief seccion de codigo encargada de declarar band1 que indica si se han ingresados datos por teclado
+*/
+boolean band1 = true; 
+/**
+  *@brief seccion de codigo encargada de declarar variables usadas para almacenar los datos leidos por los sensores
+  *
+  *Se declara la varibale temperatura que guarda el dato leido por el sensor de temperatura
+  *Se declara la varibale luz que guarda el dato leido por el sensor de luz
+*/
+float temperatura = 0;  
+float luz = 0;  
+
+/**
+  *@brief seccion de codigo encargada de declarar varibales para la seguridad del programa
+  *
+  *Se declara tamPassword que almacena el tamaño de la cadena qeue contiene la contraseña
+  *Se declara password que almacena la contraseña
+  *Se declara passIngresada que almacena la contraseña ingresada por teclado 
+  *Se declara cont4 que contiene la cantidad de valores ingresados para la constraseña
+*/
+int tamPassword = 4;
+char password[4] = "1234";  
+char passIngresada[4];     
+int intentos = 0;           
+int cont4 = 0;             
+
+
+/**
+  *@brief seccion de codigo encargada de declarar varibales para el sonido del buzzer
+  *
+  *Se declara el arreglo melodia y melodia 2 que contiene las notas musicales 
+  *Se declara el arreglo duracion y duracion 2 que almacena los valores que serviran para generar la suracion de las notas en la melodia
+*/
+int melodia[] = {	
+  NOTE_C4, NOTE_C4, NOTE_D4, NOTE_C4, NOTE_F4, NOTE_E4, NOTE_C4, NOTE_C4, NOTE_D4, NOTE_C4, NOTE_G4, NOTE_F4, NOTE_C4, NOTE_C4, NOTE_C5, NOTE_A4, NOTE_F4, NOTE_E4, NOTE_D4, NOTE_AS4, NOTE_AS4, NOTE_A4, NOTE_F4, NOTE_G4, NOTE_F4
+};
+int duraciones[] = {		
+  8, 8, 4, 4, 4, 2, 8, 8, 4, 4, 4, 2, 8, 8, 4, 4, 4, 4, 4, 8, 8, 4, 4, 4, 2
+};
+int melodia2[] = {		
+  NOTE_F4
+};
+int duraciones2[] = {		
+  5
+};
+int melodia3[] = {		
+  NOTE_F4
+};
+int duraciones3[] = {		
+  1
+};
+
+/**
+  *@brief seccion de codigo encargada de declarar varibales para hacer uso de millis
+  *
+  *Se declara la variable previousMillis que almacena el tiempo de ejecucion una vez se inicialice con el millis
+  *Se declara la variable currentMillis que almacena el tiempo de ejecucion una vez se inicialice con el millis
+*/
+unsigned long previousMillis = 0;
+unsigned long currentMillis = 0;
+
+/**
+  *@brief seccion de codigo encargada de la construccion de la maquina de estados
+  *
+  *Se crea el objeto machine del tipo StateMachine que dunciona como la maquina de estados
+  *Se crean los 4 estados y haciendo uso de la funcion addEstate() se indica cual sera la funcion que debe ejecutar cada estado
+  *Se declaran las variables enteral que funcionan como vanderas para cada una de las transiciones 
+  *Se define timeOut para ser usado en la transicion entre estados
+*/
+StateMachine machine = StateMachine();
+State* S1 = machine.addState(&seguridad); 
+State* S2 = machine.addState(&pasarMenus); 
+State* S3 = machine.addState(&monitoreo); 
+State* S4 = machine.addState(&alarma);  
+int g = 0;
+int h = 0;
+int j = 0;
+int k = 0;
+int l = 0;
+const float BETA = 3950;
+#define timeOut 5000
+
+/**
+  *@brief seccion de codigo encaragada de inicializar componentes para el funcionamineto de la maquina
+  *
+  *Se declara el puerto serial 
+  *Se indican la naturaleza de los pines
+  *Se hace el llamado a la funcionar apagarLeds
+  *Se inicializa el lcd que tendra 16 columnasy 2 final
+  *Se crea el condicional para el almacenamineto de la memoria
+  *Se declaran las transiciones de los estados que dependeran de una funcion booleana que si retorna true de realizara la transicion correctamente
+*/
+
+void setup() {
+  Serial.begin(9600);
+  band = EEPROM.read(40);
+  pinMode(LED_BLUE, OUTPUT);
+  pinMode(LED_GREEN, OUTPUT);
+  pinMode(LED_RED, OUTPUT);
+  pinMode(SENSOR_LUZ, OUTPUT);
+
+  apagarLeds();
+  lcd.begin(16, 2); 
+
+  if (band == 255) {
+    guardarMemoria();
+  } else {
+    recuperarMemoria();
+  }
+
+  S1->addTransition(&transitionS1S2, S2);  
+  S2->addTransition(&transitionS2S3, S3); 
+  S3->addTransition(&transitionS3S4, S4);   
+  S3->addTransition(&transitionS3S2, S2);  
+  S4->addTransition(&transitionS4S3, S3);   
+  S4->addTransition(&transitionS4S2, S2); 
+}
+
+/**
+  *@brief Función principal de ejecución.
+  *@details Ejecucion de maquina.
+*/
+void loop() {
+  machine.run();
+}
+
+/**
+  *@brief Funcion de espera.
+  *@details Detiene el sistema unos milisegundos antes de limpiar el lcd.
+  @param int time me indica la diferencia etre el tiempo alamacenado en previousMillis menos currentMillis
+*/
+void esperar(int time) {
+  previousMillis = millis();
+  currentMillis = millis();
+  while ((currentMillis - previousMillis) <= (time) ) {
+    currentMillis = millis();
+  }
+}
+
+/**
+  *@brief Funcion para apagar RGB.
+  *@details Valores de RGB en LOW.
+*/
+void apagarLeds() {
+  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_GREEN, LOW);
+}
+
+/**
+  *@brief Funcion para guardar valores en memoria.
+  *@details Guarda los datos ingresados por el usuario en memoria.
+*/
+void guardarMemoria() {
+  EEPROM.put(0, umbralTempHigh);
+  EEPROM.put(10, umbralTempLow);
+  EEPROM.put(20, umbralLuzHigh);
+  EEPROM.put(30, umbralLuzLow);
+  EEPROM.put(40, 300);
+}
+
+/**
+  *@brief Funcion para traer valores en memoria.
+  *@details Carga los ultimos datos ingresados por el usuario.
+*/
+void recuperarMemoria() {
+  EEPROM.get(0, umbralTempHigh);
+  EEPROM.get(10,  umbralTempLow);
+  EEPROM.get(20, umbralLuzHigh);
+  EEPROM.get(30, umbralLuzLow);
+}
+
+/**
+  *@brief Seccion de codigo para la creacione de funciones para la transicion entre estados
+  *Se declara transitionS1S2 que retorna un valor valor booleano el cual indica si se hace la transicion entre el estado 1 y 2
+  *Se declara transitionS2S3 que retorna un valor valor booleano el cual indica si se hace la transicion entre el estado 2 y 3
+  *Se declara transitionS3S4 que retorna un valor valor booleano el cual indica si se hace la transicion entre el estado 3 y 4
+  *Se declara transitionS3S2 que retorna un valor valor booleano el cual indica si se hace la transicion entre el estado 3 y 2
+  *Se declara transitionS4S3 que retorna un valor valor booleano el cual indica si se hace la transicion entre el estado 4 y 3
+  *Se declara transitionS4S2 que retorna un valor valor booleano el cual indica si se hace la transicion entre el estado 4 y 2
+*/
+bool transitionS1S2() {
+  if (g == 1) {
+    g = 0;
+    return true;
+  }
+  return false;
+}
+bool transitionS2S3() {
+  if (seleccion == 'A') {
+    seleccion = ' ';
+    return true;
+  }
+  return false;
+}
+bool transitionS3S4() {
+  if (h == 1) {
+    h = 0;
+    return true;
+  }
+  return false;
+}
+bool transitionS3S2() {
+  if (j == 1) {
+    j = 0;
+    return true;
+  }
+  return false;
+}
+bool transitionS4S3() {
+  if (l == 1) {
+    l = 0;
+    return true;
+  }
+  return false;
+}
+bool transitionS4S2() {
+  if (k == 1) {
+    k = 0;
+    seleccion = ' ';
+    return true;
+  }
+  return false;
+}
+
+/**
+*@brief Funcion para analizar los valores de la contraseña.
+*@details Validar contraseña ingresada por usuario, si los valores no son correctos el sistema se bloquea.
+*/
+boolean seguridad() {
+  bool correcta = false;
+  do {
+    if (intentos < 4) {
+      lcd.clear();
+      apagarLeds();
+      leerPassw();
+      correcta =  decisionPassword();
+    } else {
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.println("Sistema bloqueado!");
+      sonidoError();
+      esperar(3000);  
+      intentos = 0;
+    }
+  } while (correcta == false);
+
+  return correcta;
+}
+
+/**
+  *@brief  Esta funcion lee los valores del keypad.
+  *@details Funcion para almacenar la contraseña ingresada por usuario.
+*/
+void leerPassw() {
+  apagarLeds();
+  for (int i = 0; i < 4; i++) {
+    passIngresada[i] = ' ';
+  }
+
+  int contador = 0;
+
+  lcd.setCursor(0, 0);
+  lcd.print("Contrasenia: ");
+  do {
+    seleccion = keypad.getKey();
+    if (seleccion != NO_KEY) {
+      passIngresada[contador] = seleccion;
+      lcd.setCursor(contador, 1);
+      lcd.println(seleccion);
+      contador++;
+    }
+
+  } while (contador < 4);
+
+}
+
+/**
+  *@brief Funcion booleana para determinar si la contraseña ingresada es correcta 
+  *@details Funcion para comparar la contraseña ingresada y accionar eventos.
+*/
+bool decisionPassword() {
+  if (strncmp(password, passIngresada, 4) == 0) {
+    lcd.clear();
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_RED, LOW);
+    digitalWrite(LED_GREEN, HIGH);
+    lcd.clear();
+    g = 1;
+    return true;
+  } else {
+    intentos++;
+    if (intentos < 4) {
+      digitalWrite(LED_GREEN, LOW);
+      digitalWrite(LED_RED, LOW);
+      digitalWrite(LED_BLUE, HIGH);
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.println("Contrasenia");
+      lcd.setCursor(0, 1);
+      lcd.println("Incorrecta!");
+      esperar(2000);
+    } else {
+      digitalWrite(LED_GREEN, LOW);
+      digitalWrite(LED_RED, HIGH);
+      digitalWrite(LED_BLUE, LOW);
+    }
+    return false;
+  }
+}
+
+/**
+  *@brief Declaracion de funcion para presentar opciones del menu
+  *@details Funcion para seleccionar opcion del menu siempre y cuando se presente en el lcd. Para cambiar las opciones presentadas se presiona * en el keypad
+*/
+void pasarMenus() {
+  if (cont == -1) {
+    lcd.setCursor(0, 0);
+    lcd.println("Presione * para cambiar menu");
+    lcd.setCursor(0, 1);
+    lcd.print("cambiar el menu");
+    cont = 0;
+  }
+
+  seleccion = keypad.getKey();
+  if (seleccion != NO_KEY && seleccion == '*') {
+    apagarLeds();
+    lcd.clear();
+    cont++;
+
+    if (cont == 5) {
+      cont = 1;
+    }
+    switch (cont) {
+      case 1:
+        menu1();
+        break;
+      case 2:
+        menu2();
+        break;
+      case 3:
+        menu3();
+        break;
+      case 4:
+        menu4();
+        break;
+    }
+  }
+
+  if ((seleccion == '1' || seleccion == '2' || seleccion == '3' || seleccion == '4' || seleccion == '5') && cont != 0) {
+    switch (seleccion) {
+      case '1':
+        if (cont == 1) {
+          lcd.clear();
+          pedirValor(umbralTempHigh);
+          if (band1) {
+            verificarTemperaturaAlta();
+          } else {
+            cont = 0;
+          }
+
+        }
+        break;
+      case '2':
+        if (cont == 1 || cont == 2) {
+          lcd.clear();
+          pedirValor(umbralTempLow);
+          if (band1) {
+            verificarTemperaturaBaja();
+          } else {
+            cont = 0;
+          }
+
+        }
+        break;
+      case '3':
+        if (cont == 2 || cont == 3) {
+          lcd.clear();
+          pedirValor(umbralLuzHigh);
+          if (band1) {
+            verificarLuzAlta();
+          } else {
+            cont = 0;
+          }
+
+        }
+        break;
+      case '4':
+        if (cont == 3 || cont == 4) {
+          lcd.clear();
+          pedirValor(umbralLuzLow);
+          if (band1) {
+            verificarLuzBaja();
+          } else {
+            cont = 0;
+          }
+
+        }
+        break;
+      case '5':
+        if (cont == 4) {
+          umbralTempHigh = resetUmbralTempHigh;
+          umbralTempLow = resetUmbralTempLow;
+          lcd.clear();
+          lcd.setCursor(0, 0);
+          lcd.print("Reset exitoso");
+          esperar(3000);
+          guardarMemoria();
+          mensajeEspera();
+          cont = 0;
+        }
+        break;
+    }
+
+  }
+}
+
+
+/**
+  *@brief Seccion de codigo encargada de crear funciones para presentar las opciones del menu
+  *
+  *Se crea la funcion menu1() en la cual se presentan las opciones 1 y 2 del menu en el lcd
+  *Se crea la funcion menu2() en la cual se presentan las opciones 2 y 3 del menu en el lcd
+  *Se crea la funcion menu3() en la cual se presentan las opciones 3 y 4 del menu en el lcd
+  *Se crea la funcion menu4() en la cual se presentan las opciones 4 y 5 del menu en el lcd
+*/
+void menu1() {
+  lcd.setCursor(0, 0);
+  lcd.print("1.UmbralTemp  High");
+  lcd.setCursor(0, 1);
+  lcd.println("2.UmbralTemp  Low");
+}
+void menu2() {
+  lcd.setCursor(0, 0);
+  lcd.print("2. UmbralTemp  Low");
+  lcd.setCursor(0, 1);
+  lcd.println("3. Umbral Luz High");
+}
+void menu3() {
+  lcd.setCursor(0, 0);
+  lcd.print("3. Umbral Luz High");
+  lcd.setCursor(0, 1);
+  lcd.println("4. Umbral Luz Low");
+}
+void menu4() {
+  lcd.setCursor(0, 0);
+  lcd.print("4. Umbral Luz Low");
+  lcd.setCursor(0, 1);
+  lcd.println("5. Reset");
+}
+
+/**
+  *@brief Funcion para ingresar nuevos valores de tempertura y luz.
+  *@details Almacena los valores ingresados en las variables correspondientes para la tempertura y luz.
+  *@param int valorAnt sirve para enviar como parametro a la funcion mesajeValorActual(valorAnt)
+*/
+void pedirValor(int valorAnt) {
+  boolean band2 = true;
+
+  for (int i = 0; i < 4; i++) {
+    valor[i] = ' ';
+  }
+  mensajeValorActual(valorAnt) ;
+  lcd.setCursor(0, 1);
+  lcd.print("Nuevo Valor:");
+  int cont1 = 0;
+  previousMillis = millis();
+  currentMillis = millis();
+  do {
+    band2 = true;
+    while ((currentMillis - previousMillis) <= (10000)  && band2) {
+      currentMillis = millis();
+      seleccion = keypad.getKey();
+      if (seleccion != NO_KEY ) {
+        band2 = false;
+      }
+    }
+    if (band2) {
+      seleccion = 'B';
+    }
+    if (seleccion != NO_KEY && seleccion != '*'  && seleccion != 'A'  && seleccion != 'D'   && seleccion != 'B' && seleccion != 'C' && seleccion != '#') {
+      valor[cont1] = seleccion;
+      lcd.setCursor(cont1 + 12, 1);
+      lcd.print(seleccion);
+      cont1++;
+      band1 = true;
+    }
+  } while (((seleccion != '#' && cont1 < 4) || cont1 == 0) && seleccion != 'B');
+
+  if (seleccion == 'B') {
+    //cont = 0;
+    band1 = false;
+    mensajeEspera();
+
+  }
+}
+
+/**
+  *@brief Funcion para imprimir mensaje.
+  *@details Funcion que presenta el mensaje de espera antes de entrar al menu.
+*/
+void mensajeEspera() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.println("Presione * para");
+  lcd.setCursor(0, 1);
+  lcd.print("continuar");
+};
+
+/**
+  *@brief Funcion para imprimir mensaje.
+  *@details Se presenta el mensaje cuando se verifican correctamente los datos.
+*/
+void mensajeExito() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Ajuste con exito");
+  esperar(3000);
+  mensajeEspera();
+}
+
+/**
+  *@brief Funcion para imprimir mensaje.
+  *@details Se presenta el mensaje cuando se verifican incorrectamente los datos.
+*/
+void mensajeFueraRango() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.println("Error. Valor");
+  lcd.setCursor(0, 1);
+  lcd.print("Fuera de rango");
+  esperar(3000);
+  mensajeEspera();
+  cont = 0;
+}
+
+/**
+  *@brief Funcion para verificar la temperatura baja.
+  *@details Verifica los valores establecidos de los umbrales de la temperatura con el valor promediado.
+*/
+void verificarTemperaturaBaja() {
+  if ( umbralTempHigh < atoi(valor)) {
+    mensajeFueraRango();
+  }
+  else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Ajuste con exito");
+    digitalWrite(LED_BLUE, HIGH);
+    esperar(3000);
+    digitalWrite(LED_BLUE, LOW);
+    umbralTempLow = atoi(valor);
+    EEPROM.put(10, umbralTempLow);
+    cont = 0;
+    mensajeEspera();
+  }
+}
+
+/**
+  *@brief Funcion para verificar la temperatura alta
+  *@details Verifica los valores establecidos de los umbrales de la temperatura con el valor promediado.
+*/
+void verificarTemperaturaAlta() {
+  if ( umbralTempLow > atoi(valor)) {
+    mensajeFueraRango();
+  } else if ( atoi(valor) > maxtemp ) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.println("Error. Max de temp");
+    lcd.setCursor(0, 1);
+    lcd.print("sobrepasado");
+    esperar(3000);
+    mensajeEspera();
+    cont = 0;
+
+  } else {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Ajuste con exito");
+    digitalWrite(LED_RED, HIGH);
+    sonidoBuzzer();
+    esperar(3000);
+    digitalWrite(LED_RED, LOW);
+    umbralTempHigh = atoi(valor);
+    EEPROM.put(0, umbralTempHigh);
+    cont = 0;
+    mensajeEspera();
+  }
+}
+
+/**
+  *@brief Funcion para verificar la luz alta
+  *@details Verifica los valores establecidos de los umbrales de la luz con el valor promediado.
+*/
+void verificarLuzAlta() {
+  int valor2 = (int)(atoi(valor)) / 10;
+  if ( umbralLuzLow > valor2) {
+    mensajeFueraRango();
+  } else {
+    umbralLuzHigh = valor2;
+    EEPROM.put(20, umbralLuzHigh);
+    mensajeExito();
+    cont = 0;
+  }
+}
+
+/**
+  *@brief Funcion para verificar la luz baja
+  *@details Verifica los valores establecidos de los umbrales de la luz con el valor promediado.
+*/
+void verificarLuzBaja() {
+  int valor2 = (int)(atoi(valor)) / 10;
+  if ( umbralLuzHigh < valor2) {
+    mensajeFueraRango();
+  } else if ( valor2 < minluz ) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.println("Error. Min de temp");
+    lcd.setCursor(0, 1);
+    lcd.print("sobrepasado");
+    esperar(3000);
+    mensajeEspera();
+    cont = 0;
+
+  } else {
+    umbralLuzLow = valor2;
+    EEPROM.put(30, valor2);
+    mensajeExito();
+    cont = 0;
+  }
+}
+
+/**
+  *@brief Funcion para inciar proceso de monitoreo.
+  *@details Verifica los valores de la temperatura y la luz.
+*/
+void monitoreo() {
+  verificacionTemp();
+  verificacionLuz();
+  if (temperatura > 35) { //cambiar para el moitoreo
+    h = 1;
+  } else {
+    do {
+      seleccion = keypad.getKey();
+    } while (seleccion != 'A' );
+
+    if (seleccion == 'A') {
+      j = 1;
+      cont = -1;
+    }
+  }
+
+
+}
+
+/**
+  *@brief Funcion para tomar valores del sensor de temperatura.
+  *@details Esta funcion captura 10 entradas de temperatura por el sensor para luego promediarlas.
+*/
+void leerTemperatura() {
+  float suma = 0;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.println("Temperatura: ");
+  lcd.setCursor(0, 1);
+  for (int a = 0; a < 10; a++) {
+    int analogValue = analogRead(SENSOR_TEMP);
+    float celcius =  1 / (log(1 / (1023. / analogValue - 1)) / BETA + 1.0 / 298.15) - 273.15;
+    esperar(500);
+    lcd.setCursor(0, 1);
+    lcd.println(celcius);
+    Serial.println(celcius);
+    esperar(200);
+    suma += celcius;
+  }
+  temperatura = suma / 10;
+}
+
+/**
+  *@brief Funcion para tomar valores del fotosensor
+  *@details Esta funcion captura 10 entradas de luz por el sensor para luego promediarlas.
+*/
+void leerLuz() {
+  float suma = 0;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.println("Luz: ");
+  for (int a = 0; a < 10; a++) {
+    int analogValue = analogRead(SENSOR_LUZ);
+    lcd.setCursor(0, 1);
+    Serial.println(analogValue );
+    lcd.println(analogValue );
+    esperar(700);
+    suma += analogValue ;
+  }
+  luz = suma / 10;
+}
+
+/**
+  * @brief Funcion para activar el buzzer.
+  * @details Se activa si la temperatura entrante es mayor a 35, la duracion de la nota es en milisegundos, ejecuta el tono con la duracion.
+*/
+void alarma() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.println("Alarmaaaa");
+  sonidoAlarma();
+  previousMillis = millis();
+  currentMillis = millis();
+  int time = 1;
+  bool band11 = true;
+  while ((currentMillis - previousMillis) <= (timeOut) && band11 ) {
+    currentMillis = millis();
+    if ((currentMillis - previousMillis) == 1000 * time) {
+      lcd.setCursor(0, 1);
+      lcd.print(time);
+      time++;
+    }
+    seleccion = keypad.getKey();
+    if (seleccion == 'A') {
+      band11 = false;
+    }
+  }
+
+  if (band11) {
+    l = 1;
+  } else {
+    k = 1;
+    cont = -1;
+  }
+
+
+}
+
+/**
+  *@brief Funcion para verificar los valores del sensor de temperatura.
+  *@details Esta funcion valida que la temperatura entrante es menor a 35.  
+*/
+void verificacionTemp() {
+  leerTemperatura();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.println("Prom Temperatura:");
+  lcd.setCursor(0, 1);
+  lcd.println(temperatura);
+  if ( temperatura > umbralTempHigh) {
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_GREEN, LOW);
+    digitalWrite(LED_RED, HIGH);
+    sonidoBuzzer();
+  } else if (  temperatura < umbralTempLow ) {
+    digitalWrite(LED_GREEN, LOW);
+    digitalWrite(LED_RED, LOW);
+    digitalWrite(LED_BLUE, HIGH);
+
+  } else {
+    digitalWrite(LED_RED, LOW);
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_GREEN, HIGH);
+  }
+  esperar(3000);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_GREEN, LOW);
+}
+
+/**
+  *@brief Funcion para verificar los valores del fotosensor
+  *@details Valida la luz entrante, compara el valor promedio con el umbral definido 
+*/
+void verificacionLuz() {
+  leerLuz();
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.println("Prom Luz:");
+  lcd.setCursor(0, 1);
+  lcd.println(luz);
+  if ( luz > umbralLuzHigh) {
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_GREEN, LOW);
+    digitalWrite(LED_RED, HIGH);
+  } else if (  luz  < umbralLuzLow ) {
+    digitalWrite(LED_GREEN, LOW);
+    digitalWrite(LED_RED, LOW);
+    digitalWrite(LED_BLUE, HIGH);
+  } else {
+    digitalWrite(LED_RED, LOW);
+    digitalWrite(LED_BLUE, LOW);
+    digitalWrite(LED_GREEN, HIGH);
+  }
+   esperar(3000);
+  digitalWrite(LED_RED, LOW);
+  digitalWrite(LED_BLUE, LOW);
+  digitalWrite(LED_GREEN, LOW);
+}
+
+/**
+  *@brief Funcion para activar el sonido del buzzer.
+  *@details Esta funcion activa el sonido del buzzer cuando se modifica correctamente la opcion 1 del menu, el bucle se repite 10 veces, la duracion de la nota en milisegundos.
+*/
+void sonidoBuzzer() {
+  for (int i = 0; i < 10; i++) {			// bucle repite 10 veces
+    int duracion = 1000 / duraciones[i];		// duracion de la nota en milisegundos
+    tone(BUZZER_PASIVO, melodia[i], duracion);	// ejecuta el tono con la duracion
+    int pausa = duracion * 1.30;			// calcula pausa
+    esperar(pausa);					// demora con valor de pausa
+    noTone(BUZZER_PASIVO);				// detiene reproduccion de tono
+  }
+}
+
+/**
+  *@brief Funcion para activar el sonido del buzzer.
+  *@details Esta funcion activa el sonido del buzzer cuando la contraseña es incorrecta 4 veces consecutivas, el bucle repite 10 veces, la duracion de la nota en milisegundos,
+*/
+void sonidoError() {
+  for (int i = 0; i < 2; i++) {			// bucle repite 10 veces
+    int duracion = 8000 / duraciones2[i];		// duracion de la nota en milisegundos
+    tone(BUZZER_PASIVO, melodia2[i], duracion);	// ejecuta el tono con la duracion
+    int pausa = duracion * 1.30;			// calcula pausa
+    esperar(pausa);					// demora con valor de pausa
+    noTone(BUZZER_PASIVO);				// detiene reproduccion de tono
+  }
+}
+
+/**
+  *@brief Funcion para activar el sonido de buzzer
+  *@details Se activa si la temperatura entrante es mayor a 35, la duracion de la nota es en milisegundos, ejecuta el tono con la duracion
+  *Se declara la variable i para el funcionamiento del bucle for
+*/
+void sonidoAlarma() {
+  for (int i = 0; i < 1; i++) {			// bucle repite 10 veces
+    int duracion = 2000 / duraciones3[i];		// duracion de la nota en milisegundos
+    tone(BUZZER_PASIVO, melodia3[i], duracion);	// ejecuta el tono con la duracion
+    int pausa = duracion * 1.30;			// calcula pausa
+    delay(pausa);					// demora con valor de pausa
+    noTone(BUZZER_PASIVO);				// detiene reproduccion de tono
+  }
+}
+
+/**
+  *@brief Función imprimir el valor antes de ser modificado
+  *@param int valorAnt valor alamcenado antes de hacer la modificacion 
+*/
+void mensajeValorActual(int valorAnt) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Valor ant: ");
+  lcd.print(valorAnt);
+}
+
+
+
